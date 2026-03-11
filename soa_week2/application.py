@@ -1,7 +1,9 @@
-from flask import Flask
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
+
+API_KEY = "123456"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
 db = SQLAlchemy(app)
@@ -31,5 +33,21 @@ def get_drinks():
 
         output.append(drink_data)
 
-    return output
+    return jsonify(output)
 
+@app.route('/v2/drinks', methods=['GET'])
+def get_drinks_v2():
+    api_key = request.headers.get("x-api-key")
+    if(api_key == API_KEY):
+        drinks = Drink.query.all()
+
+        output = []
+
+        for drink in drinks:
+            drink_data = {'name':drink.name, "description": drink.description}
+
+            output.append(drink_data)
+
+        return jsonify(output)
+    
+    return {"msg": "Invalid key. GET OUT!"}, 401
