@@ -60,3 +60,35 @@ def get_drinks_v2():
         return jsonify(output)
     
     return {"msg": "Invalid key. GET OUT!"}, 401
+
+@app.route('/v4/drinks', methods=['GET'])
+def get_drinks_v4():
+    drinks = Drink.query.all()
+
+    output = []
+
+    for d in drinks:
+        output.append({
+        "id": d.id,
+        "name": d.name,
+        "description": d.description,
+        "actions": {
+            "self": f"/v4/drinks/{d.id}",
+        }
+    })
+
+    return jsonify(output)
+
+@app.route('/v4/drinks/<int:id>', methods=['GET'])
+def get_drinks_id_v4(id):
+    drink = Drink.query.get(id)
+
+    return jsonify({
+        "id": drink.id,
+        "name": drink.name,
+        "description": drink.description,
+        "actions": {
+            "self": f"/v4/drinks/{drink.id}",
+            "collection": "/v4/drinks",
+        }
+    })
