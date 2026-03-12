@@ -3,13 +3,18 @@ from datetime import datetime, timezone
 
 app = Flask(__name__)
 
+users = [
+    {"id": 1, "name": "Jane Doe", "username": "janedoe"},
+    {"id": 2, "name": "John Doe", "username": "johndoe"}
+]
+
 books = [
     {"id": 1, "title": "The Great Gatsby", "author": "F. Scott Fitzgerald"},
     {"id": 2, "title": "1984", "author": "George Orwell"}
 ]
 reviews = [
-    {"id": 1, "book_id": 1, "comment": "A classic!"},
-    {"id": 2, "book_id": 2, "comment": "Mind-bending."}
+    {"id": 1, "book_id": 1, "comment": "A classic!", "user": "Jane Doe", "user-id": 1},
+    {"id": 2, "book_id": 2, "comment": "Mind-bending.", "user": "John Doe", "user-id": 2}
 ]
 
 def error(status_code, error_code, message, link=None):
@@ -123,18 +128,35 @@ def manage_single_book(id):
         books.remove(book)
         return '', 204
 
+@app.route("/api/v1/users", methods=['GET'])
+def get_users():
+    return {"data": users}
+
+@app.route("/api/v1/users/<int:id>", methods=['GET'])
+def get_user(id):
+    user = [u for u in users if u['id'] == id]
+    return {"data": user}
+
 @app.route("/api/v1/books/<int:id>/reviews", methods=['GET'])
 def get_book_reviews(id):
     book_reviews = [r for r in reviews if r['book_id'] == id]
-    return jsonify({"data": book_reviews}), 200
 
-@app.route("/api/v1/books/<int:id>/reviews/<int:review_id>/comment", methods=['GET'])
-def get_specific_review_comment(id, review_id):
+    enhanced_reviews = []
+    for r in book_reviews:
+        review_copy = r.copy()
+        # We replace user_id with a clickable URI
+        review_copy["user_uri"] = f"/api/v1/users/{r['user-id']}"
+        enhanced_reviews.append(review_copy)
+
+    return jsonify({"data": enhanced_reviews}), 200
+
+@app.route("/api/v1/books/<int:id>/reviews/<int:review_id>/user", methods=['GET'])
+def get_specific_review_user(id, review_id):
     review = next((r for r in reviews if r['id'] == review_id and r['book_id'] == id), None)
 
     return jsonify({
         "data": {
-            "comment": review['comment']
+            "user": review['user']
         }
     }), 200
 
