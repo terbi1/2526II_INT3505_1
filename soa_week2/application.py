@@ -1,11 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
+from flask_caching import Cache
+
+from random import randint
 
 app = Flask(__name__)
+app.config['CACHE_TYPE'] = 'simple'
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
+cache = Cache(app)
 
 API_KEY = "123456"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
 db = SQLAlchemy(app)
 app.app_context().push()
 
@@ -18,8 +23,12 @@ class Drink(db.Model):
         return f"{self.name} - {self.description}"
 
 @app.route('/')
+@cache.cached(timeout=10) #server side cache - not restful
 def index():
-    return "hello"
+    randnum = randint (1,1000)
+    res = make_response(jsonify({"lucky-number": randnum}))
+    res.headers['Cache-Control'] = 'public, max-age=10' #client side cache
+    return res
 
 @app.route('/v1/drinks', methods=['GET'])
 def get_drinks():
