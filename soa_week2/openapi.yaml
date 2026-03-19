@@ -1,0 +1,205 @@
+openapi: 3.0.0
+info:
+  title: Drinks API
+  description: API quản lý đồ uống với các cơ chế xác thực JWT và API Key.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+    description: Local server
+
+# Khai báo các cơ chế bảo mật (Security Schemes)
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Nhập JWT token lấy được từ endpoint /login.
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Nhập API Key (ví dụ trong code là "123456").
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: "admin"
+        password:
+          type: string
+          example: "password"
+
+    DrinkV1:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Cà phê đen"
+        description:
+          type: string
+          example: "Cà phê rang xay nguyên chất"
+
+    DrinkV4ListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Cà phê đen"
+        description:
+          type: string
+          example: "Cà phê rang xay nguyên chất"
+        actions:
+          type: object
+          properties:
+            self:
+              type: string
+              example: "/v4/drinks/1"
+
+    DrinkV4Detail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Cà phê đen"
+        description:
+          type: string
+          example: "Cà phê rang xay nguyên chất"
+        actions:
+          type: object
+          properties:
+            self:
+              type: string
+              example: "/v4/drinks/1"
+            collection:
+              type: string
+              example: "/v4/drinks"
+
+paths:
+  /:
+    get:
+      summary: Lấy con số may mắn (Yêu cầu JWT)
+      description: Trả về một con số ngẫu nhiên được cache ở cả server-side và client-side. Bắt buộc phải có JWT token hợp lệ.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lucky-number:
+                    type: integer
+                    example: 420
+        '401':
+          description: Thiếu token hoặc token không hợp lệ
+
+  /login:
+    post:
+      summary: Đăng nhập để lấy JWT
+      description: Nhập username và password (admin/password) để nhận access_token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Sai username hoặc password
+
+  /v1/drinks:
+    get:
+      summary: Lấy danh sách đồ uống (V1)
+      description: Trả về mảng đồ uống chỉ gồm tên và mô tả. Không yêu cầu xác thực.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DrinkV1'
+
+  /v2/drinks:
+    get:
+      summary: Lấy danh sách đồ uống (V2 - Yêu cầu API Key)
+      description: Trả về mảng đồ uống tương tự V1, nhưng bắt buộc truyền `x-api-key` trong Header.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DrinkV1'
+        '401':
+          description: Sai hoặc thiếu API Key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  msg:
+                    type: string
+                    example: "Invalid key. GET OUT!"
+
+  /v4/drinks:
+    get:
+      summary: Lấy danh sách đồ uống (V4 - HATEOAS)
+      description: Trả về danh sách đồ uống bao gồm cả ID và object `actions` chứa HATEOAS link. Không yêu cầu xác thực.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DrinkV4ListItem'
+
+  /v4/drinks/{id}:
+    get:
+      summary: Lấy chi tiết đồ uống (V4 - HATEOAS)
+      description: Trả về thông tin của một đồ uống cụ thể kèm theo links điều hướng.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID của đồ uống
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrinkV4Detail'
