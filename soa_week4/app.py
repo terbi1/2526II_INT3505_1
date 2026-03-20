@@ -45,7 +45,7 @@ def paginate(items: list, page: int, limit: int) -> tuple[list, dict]:
 
 @app.route("/")
 def hello():
- return jsonify({"msg":"This was not a triumph"})
+    return jsonify({"msg":"This was not a triumph"})
 
 @app.get("/v1/books")
 def list_books():
