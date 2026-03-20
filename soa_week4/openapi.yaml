@@ -12,7 +12,7 @@ info:
 
 servers:
   - url: http://127.0.0.1:5000/v1
-  - url: http://api.books/v1
+  - url: https://2526-ii-int-3505-1-8ensn3pjp-23020166-7634s-projects.vercel.app/v1
 
 tags:
   - name: Books
