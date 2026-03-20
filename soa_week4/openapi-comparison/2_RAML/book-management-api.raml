@@ -1,0 +1,367 @@
+#%RAML 1.0
+title: Book Management API
+version: v1
+baseUri: http://localhost:5000/{version}
+mediaType: application/json
+
+description: |
+  API quản lý sách đơn giản viết bằng Flask.
+  Hỗ trợ tìm kiếm, lọc theo thể loại, phân trang và CRUD.
+
+documentation:
+  - title: Ghi chú triển khai
+    content: |
+      Server chạy trên Flask với in-memory store (`BOOKS` list).
+      Dữ liệu reset mỗi khi restart. Không có authentication.
+
+  - title: Mã lỗi
+    content: |
+      | Code | HTTP | Mô tả |
+      |---|---|---|
+      | `INVALID_PARAM` | 400 | Query param sai kiểu hoặc giá trị không hợp lệ |
+      | `BAD_REQUEST` | 400 | Body không phải JSON |
+      | `BOOK_NOT_FOUND` | 404 | Không tìm thấy sách theo ID |
+      | `NOT_FOUND` | 404 | Route không tồn tại |
+      | `METHOD_NOT_ALLOWED` | 405 | HTTP method không hỗ trợ |
+      | `INTERNAL_ERROR` | 500 | Lỗi server nội bộ |
+
+# ─────────────────────────────────────────────
+# TYPES
+# ─────────────────────────────────────────────
+
+types:
+
+  Genre:
+    type: string
+    enum: [fiction, non-fiction, sci-fi, history, biography]
+    description: Thể loại sách hợp lệ (VALID_GENRES trong app.py)
+
+  Book:
+    description: |
+      Một cuốn sách trong hệ thống.
+      `isbn`, `publishedYear`, `price` có thể là null.
+    type: object
+    properties:
+      id:
+        type: integer
+        description: ID tự tăng, do server gán khi tạo
+        example: 1
+      title:
+        type: string
+        example: Dune
+      author:
+        type: string
+        example: Frank Herbert
+      isbn:
+        type: string | nil
+        required: false
+        example: 978-0-441-01359-8
+      genre:
+        type: Genre
+        example: sci-fi
+      publishedYear:
+        type: integer | nil
+        required: false
+        example: 1965
+      price:
+        type: number | nil
+        required: false
+        example: 14.99
+    example:
+      id: 1
+      title: Dune
+      author: Frank Herbert
+      isbn: 978-0-441-01359-8
+      genre: sci-fi
+      publishedYear: 1965
+      price: 14.99
+
+  CreateBookRequest:
+    description: |
+      Body để tạo sách mới. `title`, `author`, `genre` bắt buộc —
+      thiếu sẽ raise KeyError ở server và trả về 500.
+    type: object
+    properties:
+      title:
+        type: string
+        required: true
+      author:
+        type: string
+        required: true
+      isbn:
+        type: string
+        required: false
+      genre:
+        type: Genre
+        required: true
+      publishedYear:
+        type: integer
+        required: false
+      price:
+        type: number
+        required: false
+    example:
+      title: The Hobbit
+      author: J.R.R. Tolkien
+      isbn: 978-0-261-10221-7
+      genre: fiction
+      publishedYear: 1937
+      price: 13.99
+
+  UpdateBookRequest:
+    description: |
+      Body cho PUT — thay thế toàn bộ sách.
+      `title`, `author`, `genre` bắt buộc.
+      `isbn`, `publishedYear`, `price` optional: giữ giá trị cũ nếu không truyền.
+    type: object
+    properties:
+      title:
+        type: string
+        required: true
+      author:
+        type: string
+        required: true
+      isbn:
+        type: string
+        required: false
+        description: Giữ giá trị cũ nếu bỏ qua
+      genre:
+        type: Genre
+        required: true
+      publishedYear:
+        type: integer
+        required: false
+        description: Giữ giá trị cũ nếu bỏ qua
+      price:
+        type: number
+        required: false
+        description: Giữ giá trị cũ nếu bỏ qua
+    example:
+      title: Dune Messiah
+      author: Frank Herbert
+      genre: sci-fi
+      publishedYear: 1969
+      price: 13.99
+
+  Pagination:
+    description: Metadata phân trang đính kèm trong response của GET /books
+    type: object
+    properties:
+      page:
+        type: integer
+        description: Trang hiện tại
+        example: 1
+      limit:
+        type: integer
+        description: Số bản ghi mỗi trang (đã clamp vào [1, 100])
+        example: 20
+      total:
+        type: integer
+        description: Tổng số sách sau khi áp dụng filter
+        example: 5
+      totalPages:
+        type: integer
+        description: max(1, ceil(total / limit))
+        example: 1
+    example:
+      page: 1
+      limit: 20
+      total: 5
+      totalPages: 1
+
+  BookListResponse:
+    description: Response của GET /v1/books
+    type: object
+    properties:
+      data:
+        type: Book[]
+      pagination:
+        type: Pagination
+    example:
+      data:
+        - id: 1
+          title: Dune
+          author: Frank Herbert
+          isbn: 978-0-441-01359-8
+          genre: sci-fi
+          publishedYear: 1965
+          price: 14.99
+      pagination:
+        page: 1
+        limit: 20
+        total: 1
+        totalPages: 1
+
+  ErrorResponse:
+    description: Cấu trúc lỗi chuẩn từ hàm make_error()
+    type: object
+    properties:
+      code:
+        type: string
+        description: Mã lỗi định danh
+        example: BOOK_NOT_FOUND
+      message:
+        type: string
+        description: Mô tả lỗi (có thể rỗng với lỗi 404/405/500 từ errorhandler)
+        example: Cannot find book with this id
+    example:
+      code: BOOK_NOT_FOUND
+      message: Cannot find book with this id
+
+# ─────────────────────────────────────────────
+# TRAITS
+# ─────────────────────────────────────────────
+
+traits:
+  hasBookNotFound:
+    responses:
+      404:
+        description: Không tìm thấy sách với book_id đã cho
+        body:
+          type: ErrorResponse
+          example:
+            code: BOOK_NOT_FOUND
+            message: Cannot find book with this id
+
+  requiresJsonBody:
+    responses:
+      400:
+        description: Request body không phải JSON object hợp lệ
+        body:
+          type: ErrorResponse
+          example:
+            code: BAD_REQUEST
+            message: Request body must be JSON
+
+  paginated:
+    queryParameters:
+      page:
+        type: integer
+        description: Số trang, tối thiểu 1 (clamp bằng max(1, ...))
+        default: 1
+        minimum: 1
+        required: false
+        example: 1
+      limit:
+        type: integer
+        description: Số bản ghi/trang, clamp vào [1, 100]
+        default: 20
+        minimum: 1
+        maximum: 100
+        required: false
+        example: 20
+    responses:
+      400:
+        description: page hoặc limit không parse được thành integer
+        body:
+          type: ErrorResponse
+
+# ─────────────────────────────────────────────
+# ENDPOINTS
+# ─────────────────────────────────────────────
+
+/:
+  description: Health check — không thuộc prefix /v1
+  get:
+    description: Kiểm tra server hoạt động. Trả về chuỗi cố định.
+    responses:
+      200:
+        body:
+          type: object
+          properties:
+            msg:
+              type: string
+              example: This was not a triumph
+          example:
+            msg: This was not a triumph
+
+/books:
+  description: Tập hợp toàn bộ sách
+
+  get:
+    is: [paginated]
+    description: |
+      Lấy danh sách sách với phân trang, lọc genre và tìm kiếm.
+      
+      **Thứ tự xử lý:** lọc genre → lọc q → paginate.
+      
+      Tìm kiếm `q` là substring match, case-insensitive trên `title` và `author`.
+    queryParameters:
+      genre:
+        type: Genre
+        description: Lọc chính xác theo thể loại (so sánh ==)
+        required: false
+        example: sci-fi
+      q:
+        type: string
+        description: |
+          Tìm kiếm trong title hoặc author (case-insensitive, strip whitespace).
+          Bỏ trống hoặc bỏ qua = không filter.
+        required: false
+        example: Frank
+    responses:
+      200:
+        description: Danh sách sách và metadata phân trang
+        body:
+          type: BookListResponse
+      400:
+        description: Genre không thuộc danh sách hợp lệ
+        body:
+          type: ErrorResponse
+          example:
+            code: INVALID_PARAM
+            message: "'genre' phải là một trong: biography, fiction, history, non-fiction, sci-fi."
+
+  post:
+    is: [requiresJsonBody]
+    description: |
+      Tạo sách mới. `id` = `len(BOOKS) + 1` tại thời điểm tạo.
+      
+      **Quan trọng:** `title`, `author`, `genre` phải có mặt trong body,
+      nếu không server raise `KeyError` → 500.
+    body:
+      type: CreateBookRequest
+    responses:
+      201:
+        description: Sách được tạo thành công
+        body:
+          type: Book
+
+  /{book_id}:
+    description: Thao tác trên một cuốn sách cụ thể
+    uriParameters:
+      book_id:
+        type: string
+        description: |
+          ID của sách trong URL (Flask truyền vào là string,
+          nhưng BOOKS dùng integer key — cần cast khi lookup).
+        example: "1"
+
+    get:
+      is: [hasBookNotFound]
+      description: Lấy thông tin chi tiết một cuốn sách theo ID.
+      responses:
+        200:
+          description: Thông tin sách
+          body:
+            type: Book
+
+    put:
+      is: [hasBookNotFound, requiresJsonBody]
+      description: |
+        Thay thế toàn bộ dữ liệu sách (PUT semantics).
+        Các field optional giữ giá trị cũ nếu không có trong body.
+      body:
+        type: UpdateBookRequest
+      responses:
+        200:
+          description: Sách sau khi cập nhật
+          body:
+            type: Book
+
+    delete:
+      is: [hasBookNotFound]
+      description: Xóa sách khỏi store. Không có response body.
+      responses:
+        204:
+          description: Xóa thành công, không có body

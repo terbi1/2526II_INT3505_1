@@ -1,0 +1,307 @@
+FORMAT: 1A
+HOST: http://localhost:5000
+
+# Book Management API
+
+API quản lý sách đơn giản viết bằng Flask. Hỗ trợ tìm kiếm, lọc theo thể loại,
+phân trang, và các thao tác CRUD cơ bản.
+
+**Base path:** `/v1`
+
+## Lưu ý về kiểu dữ liệu
+
+- `book_id` trong URL là **integer** (vd: `1`, `2`), không phải string.
+- `GET /v1/books/<book_id>` và `PUT`, `DELETE` tương tự — Flask nhận string từ URL
+  nhưng BOOKS store dùng integer key.
+- Các field `isbn`, `publishedYear`, `price` là **optional** khi tạo/cập nhật sách.
+
+---
+
+## Mã lỗi
+
+| Code | HTTP | Mô tả |
+|---|---|---|
+| `INVALID_PARAM` | 400 | Query param sai kiểu hoặc giá trị không hợp lệ |
+| `BAD_REQUEST` | 400 | Request body không phải JSON hợp lệ |
+| `BOOK_NOT_FOUND` | 404 | Không tìm thấy sách với ID đã cho |
+| `NOT_FOUND` | 404 | Route không tồn tại |
+| `METHOD_NOT_ALLOWED` | 405 | HTTP method không được hỗ trợ |
+| `INTERNAL_ERROR` | 500 | Lỗi server nội bộ |
+
+---
+
+# Group Books
+
+## Data Structures
+
+### Book
++ id: 1 (number, required) - ID tự tăng, do server gán
++ title: `Dune` (string, required)
++ author: `Frank Herbert` (string, required)
++ isbn: `978-0-441-01359-8` (string, optional) - Có thể null
++ genre: `sci-fi` (enum[string], required)
+    + Members
+        + fiction
+        + non-fiction
+        + sci-fi
+        + history
+        + biography
++ publishedYear: 1965 (number, optional) - Có thể null
++ price: 14.99 (number, optional) - Có thể null
+
+### CreateBookRequest
++ title: `Dune` (string, required)
++ author: `Frank Herbert` (string, required)
++ isbn: `978-0-441-01359-8` (string, optional)
++ genre: `sci-fi` (string, required) - Phải thuộc VALID_GENRES
++ publishedYear: 1965 (number, optional)
++ price: 14.99 (number, optional)
+
+### UpdateBookRequest
++ title: `Dune` (string, required) - PUT thay thế toàn bộ, title bắt buộc
++ author: `Frank Herbert` (string, required)
++ isbn: `978-0-441-01359-8` (string, optional) - Giữ giá trị cũ nếu không truyền
++ genre: `sci-fi` (string, required)
++ publishedYear: 1965 (number, optional) - Giữ giá trị cũ nếu không truyền
++ price: 14.99 (number, optional) - Giữ giá trị cũ nếu không truyền
+
+### Pagination
++ page: 1 (number) - Trang hiện tại
++ limit: 20 (number) - Số bản ghi mỗi trang (clamp 1–100)
++ total: 5 (number) - Tổng số sách sau khi filter
++ totalPages: 1 (number) - max(1, ceil(total / limit))
+
+### ErrorResponse
++ code: `BOOK_NOT_FOUND` (string, required)
++ message: `Cannot find book with this id` (string, required)
+
+---
+
+## Danh sách sách [/v1/books{?page,limit,genre,q}]
+
+### Lấy danh sách sách [GET]
+
+Trả về danh sách sách có hỗ trợ phân trang, lọc theo thể loại và tìm kiếm
+full-text (không phân biệt hoa thường) trên `title` và `author`.
+
+Thứ tự filter: genre trước → q sau → paginate.
+
++ Parameters
+    + page: 1 (number, optional) - Số trang, tối thiểu 1. Default: 1
+    + limit: 20 (number, optional) - Số bản ghi/trang, clamp vào [1, 100]. Default: 20
+    + genre: `sci-fi` (enum[string], optional) - Lọc theo thể loại chính xác
+        + Members
+            + fiction
+            + non-fiction
+            + sci-fi
+            + history
+            + biography
+    + q (string, optional) - Tìm kiếm trong `title` hoặc `author` (case-insensitive, substring match)
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "data": [
+                    {
+                        "id": 1,
+                        "title": "Dune",
+                        "author": "Frank Herbert",
+                        "isbn": "978-0-441-01359-8",
+                        "genre": "sci-fi",
+                        "publishedYear": 1965,
+                        "price": 14.99
+                    },
+                    {
+                        "id": 5,
+                        "title": "Ender's Game",
+                        "author": "Orson Scott Card",
+                        "isbn": "978-0-8125-5070-6",
+                        "genre": "sci-fi",
+                        "publishedYear": 1985,
+                        "price": 11.99
+                    }
+                ],
+                "pagination": {
+                    "page": 1,
+                    "limit": 20,
+                    "total": 2,
+                    "totalPages": 1
+                }
+            }
+
++ Response 400 (application/json) - page hoặc limit không phải integer
+
+    + Body
+
+            {
+                "code": "INVALID_PARAM",
+                "message": "Page must be an integer"
+            }
+
++ Response 400 (application/json) - genre không thuộc danh sách hợp lệ
+
+    + Body
+
+            {
+                "code": "INVALID_PARAM",
+                "message": "'genre' phải là một trong: biography, fiction, history, non-fiction, sci-fi."
+            }
+
+### Tạo sách mới [POST]
+
+Tạo một cuốn sách mới. `id` được server tự gán bằng `len(BOOKS) + 1`.
+
+**Lưu ý:** Nếu `title`, `author`, hoặc `genre` vắng mặt trong body, server sẽ
+raise `KeyError` và trả về 500 (thiếu validation ở tầng app).
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "title": "The Hobbit",
+                "author": "J.R.R. Tolkien",
+                "isbn": "978-0-261-10221-7",
+                "genre": "fiction",
+                "publishedYear": 1937,
+                "price": 13.99
+            }
+
++ Response 201 (application/json)
+
+    + Body
+
+            {
+                "id": 6,
+                "title": "The Hobbit",
+                "author": "J.R.R. Tolkien",
+                "isbn": "978-0-261-10221-7",
+                "genre": "fiction",
+                "publishedYear": 1937,
+                "price": 13.99
+            }
+
++ Response 400 (application/json) - Body không phải JSON
+
+    + Body
+
+            {
+                "code": "BAD_REQUEST",
+                "message": "Request body must be JSON"
+            }
+
+---
+
+## Sách theo ID [/v1/books/{book_id}]
+
++ Parameters
+    + book_id: 1 (number, required) - ID của sách (integer)
+
+### Lấy thông tin sách [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "id": 1,
+                "title": "Dune",
+                "author": "Frank Herbert",
+                "isbn": "978-0-441-01359-8",
+                "genre": "sci-fi",
+                "publishedYear": 1965,
+                "price": 14.99
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "code": "BOOK_NOT_FOUND",
+                "message": "Cannot find book with this id"
+            }
+
+### Cập nhật sách [PUT]
+
+Thay thế toàn bộ dữ liệu sách. Các field optional (`isbn`, `publishedYear`, `price`)
+sẽ giữ nguyên giá trị cũ nếu không được truyền trong body.
+
+`title`, `author`, `genre` là bắt buộc — thiếu sẽ raise `KeyError` → 500.
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "title": "Dune Messiah",
+                "author": "Frank Herbert",
+                "genre": "sci-fi",
+                "publishedYear": 1969,
+                "price": 13.99
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "id": 1,
+                "title": "Dune Messiah",
+                "author": "Frank Herbert",
+                "isbn": "978-0-441-01359-8",
+                "genre": "sci-fi",
+                "publishedYear": 1969,
+                "price": 13.99
+            }
+
++ Response 400 (application/json)
+
+    + Body
+
+            {
+                "code": "BAD_REQUEST",
+                "message": "Request body must be JSON"
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "code": "BOOK_NOT_FOUND",
+                "message": "Cannot find book with this id"
+            }
+
+### Xóa sách [DELETE]
+
++ Response 204
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "code": "BOOK_NOT_FOUND",
+                "message": "Cannot find book with this id"
+            }
+
+---
+
+# Group Health Check
+
+## Root [/]
+
+### Ping [GET]
+
+Endpoint kiểm tra server còn sống. Không thuộc prefix `/v1`.
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "msg": "This was not a triumph"
+            }
