@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request, abort
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 app.config['SWAGGER'] = {
-    'title': 'Drinks API',
+    'title': 'Book Management API',
     'uiversion': 3,
     'openapi': '3.0.0'
 }
@@ -80,7 +80,6 @@ def list_books():
 
 @app.post("/v1/books")
 def create_book():
-    """POST /v1/books — Create a new book."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return make_error("BAD_REQUEST", "Request body must be JSON")

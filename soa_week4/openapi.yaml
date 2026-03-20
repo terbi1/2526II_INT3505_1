@@ -11,8 +11,8 @@ info:
     email: support@bookapi.dev
 
 servers:
-  - url: /
-    description: Current server
+  - url: http://127.0.0.1:5000/v1
+  - url: http://api.books/v1
 
 tags:
   - name: Books
