@@ -16,11 +16,9 @@ app.config['SWAGGER'] = {
     'openapi': '3.0.0'
 }
 
-# 3. Khởi tạo Swagger và chỉ đường dẫn tới file YAML
 swagger = Swagger(app, template_file='openapi.yaml')
 jwt = JWTManager(app)
 cache = Cache(app)
-# swagger = Swagger(app)
 
 API_KEY = "123456"
 

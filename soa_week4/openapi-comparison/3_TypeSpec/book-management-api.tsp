@@ -15,9 +15,8 @@ using TypeSpec.Rest;
  * In-memory store — dữ liệu reset khi restart server.
  * Không có authentication.
  */
-@service({
-  title: "Book Management API",
-  version: "1.0.0",
+@service(#{
+  title: "Book Management API"
 })
 @server("http://localhost:5000", "Local development")
 namespace BookManagementAPI;
@@ -49,7 +48,7 @@ model Book {
    * ID tự tăng, do server gán: len(BOOKS) + 1.
    * Readonly — không truyền khi tạo/cập nhật.
    */
-  @visibility("read")
+  @visibility(Lifecycle.Read)
   id: int32;
 
   title: string;

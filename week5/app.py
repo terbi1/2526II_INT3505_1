@@ -46,11 +46,8 @@ class Transaction(db.Model):
 def get_books():
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
-    search_query = request.args.get('q', type=str)
 
     query = Book.query
-    if search_query:
-        query = query.filter(Book.title.ilike(f'%{search_query}%'))
 
     pagination = query.paginate(page=page, per_page=limit, error_out=False)
 
@@ -353,3 +350,4 @@ def get_author_by_id(author_id):
             'total_books': len(author.books)         
         }
     }), 200
+

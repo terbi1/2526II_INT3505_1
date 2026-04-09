@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify
 from functools import wraps
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bi_mat_quoc_gia_123'
+app.config['SECRET_KEY'] = 'super_duper_secret_key'
 
 users = {
     "admin_user": {"password": "123", "role": "admin", "scopes": ["read", "write", "delete"]},
@@ -18,6 +18,7 @@ def create_tokens(user_id, role, scopes):
         "scopes": scopes,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
     }
+
     access_token = jwt.encode(access_payload, app.config['SECRET_KEY'], algorithm="HS256")
 
     refresh_payload = {
@@ -71,7 +72,7 @@ def login():
             "refresh_token": refresh
         })
     
-    return jsonify({"msg": "Sai tài khoản"}), 401
+    return jsonify({"msg": "Wrong credentials"}), 401
 
 @app.route('/refresh', methods=['POST'])
 def refresh():
@@ -83,12 +84,12 @@ def refresh():
         new_access, _ = create_tokens(user_id, user['role'], user['scopes'])
         return jsonify({"access_token": new_access})
     except:
-        return jsonify({"msg": "Refresh token không hợp lệ"}), 401
+        return jsonify({"msg": "Refresh token invalid"}), 401
 
 @app.route('/admin-only')
 @authorize(required_role="admin")
 def admin_api(current_user):
-    return jsonify({"msg": f"Chào Admin {current_user}, bạn có quyền tối cao!"})
+    return jsonify({"msg": f"Oh hi Admin {current_user}, !"})
 
 @app.route('/write-data')
 @authorize(required_scope="write")

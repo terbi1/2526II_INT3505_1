@@ -1,0 +1,537 @@
+openapi: 3.0.0
+info:
+  description: |-
+    Book Management API
+
+    API quản lý sách đơn giản viết bằng Flask.
+    Hỗ trợ tìm kiếm, lọc theo thể loại, phân trang và CRUD.
+
+    Nguồn: app.py (Flask + Flasgger)
+    In-memory store — dữ liệu reset khi restart server.
+    Không có authentication.
+  title: Book Management API
+  version: 0.0.0
+servers:
+- description: Local development
+  url: http://localhost:5000
+tags:
+- name: books
+paths:
+  /:
+    get:
+      description: |-
+        Ping endpoint. Trả về chuỗi cố định.
+        Không liên quan đến base path /v1.
+      operationId: root_ping
+      parameters: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Root_ping_200_response"
+          description: The request has succeeded.
+      x-openapi-router-controller: openapi_server.controllers.default_controller
+  /v1/books:
+    get:
+      description: |-
+        Lấy danh sách sách.
+
+        Thứ tự xử lý filter trong app.py:
+        1. Validate page, limit (parse int, clamp)
+        2. Validate genre (nếu có)
+        3. Filter theo genre (so sánh ==)
+        4. Filter theo q (substring, case-insensitive, trên title VÀ author)
+        5. Paginate
+      operationId: books_list
+      parameters:
+      - description: |-
+          Số trang. Clamp bằng max(1, page) — giá trị < 1 tự động thành 1.
+          Non-integer → 400 INVALID_PARAM.
+        explode: false
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          format: int32
+          type: integer
+        style: form
+      - description: |-
+          Số bản ghi/trang. Clamp vào [1, 100].
+          Non-integer → 400 INVALID_PARAM.
+        explode: false
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          format: int32
+          type: integer
+        style: form
+      - description: |-
+          Lọc chính xác theo thể loại (b["genre"] == genre).
+          Nếu giá trị không thuộc Genre enum → 400 INVALID_PARAM.
+        explode: false
+        in: query
+        name: genre
+        required: false
+        schema:
+          $ref: "#/components/schemas/Genre"
+        style: form
+      - description: |-
+          Tìm kiếm trong title hoặc author.
+          Strip whitespace, lowercase, substring match.
+          Bỏ trống hoặc bỏ qua = không filter.
+        explode: false
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListResponse"
+          description: The request has succeeded.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+          description: The server could not understand the request due to invalid
+            syntax.
+      tags:
+      - books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+    post:
+      description: |-
+        Tạo sách mới.
+
+        `id` = `len(BOOKS) + 1` — không an toàn với concurrent requests,
+        nhưng đây là in-memory demo.
+
+        Thiếu `title`, `author`, hoặc `genre` trong body sẽ raise
+        Python KeyError → HTTP 500 (không có validation ở app layer).
+      operationId: books_create
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+          description: The request has succeeded and a new resource has been created
+            as a result.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+          description: The server could not understand the request due to invalid
+            syntax.
+      tags:
+      - books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+  /v1/books/{bookId}:
+    delete:
+      description: |-
+        Xóa sách khỏi in-memory store.
+        Response 204 không có body (trả về empty string "").
+      operationId: by_id_delete
+      parameters:
+      - explode: false
+        in: path
+        name: bookId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: "There is no content to send for this request, but the headers\
+            \ may be useful. "
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+          description: The server cannot find the requested resource.
+      tags:
+      - books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+    get:
+      description: |-
+        Lấy thông tin chi tiết một cuốn sách.
+
+        book_id trong URL là string, app.py dùng BOOKS.get(book_id) —
+        cần truyền đúng kiểu integer ID khi lookup.
+      operationId: by_id_get
+      parameters:
+      - explode: false
+        in: path
+        name: bookId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+          description: The request has succeeded.
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+          description: The server cannot find the requested resource.
+      tags:
+      - books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+    put:
+      description: |-
+        Thay thế toàn bộ dữ liệu sách (PUT semantics).
+
+        Các field optional trong UpdateBookRequest sẽ fallback về
+        giá trị cũ của sách nếu không có trong body:
+        isbn       → data.get("isbn", book.get("isbn"))
+        publishedYear → data.get("publishedYear", book.get("publishedYear"))
+        price      → data.get("price", book.get("price"))
+      operationId: by_id_update
+      parameters:
+      - explode: false
+        in: path
+        name: bookId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+          description: The request has succeeded.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+          description: The server could not understand the request due to invalid
+            syntax.
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+          description: The server cannot find the requested resource.
+      tags:
+      - books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+components:
+  parameters:
+    PaginationParams.limit:
+      description: |-
+        Số bản ghi/trang. Clamp vào [1, 100].
+        Non-integer → 400 INVALID_PARAM.
+      explode: false
+      in: query
+      name: limit
+      required: false
+      schema:
+        default: 20
+        format: int32
+        type: integer
+      style: form
+    PaginationParams.page:
+      description: |-
+        Số trang. Clamp bằng max(1, page) — giá trị < 1 tự động thành 1.
+        Non-integer → 400 INVALID_PARAM.
+      explode: false
+      in: query
+      name: page
+      required: false
+      schema:
+        default: 1
+        format: int32
+        type: integer
+      style: form
+  schemas:
+    ApiError:
+      description: |-
+        Cấu trúc lỗi chuẩn từ hàm make_error() trong app.py.
+
+        Các error handler 404/405/500 trả về message rỗng "".
+        Các lỗi business logic có message mô tả cụ thể.
+      example:
+        code: code
+        message: message
+      properties:
+        code:
+          description: |-
+            Mã lỗi định danh. Các giá trị có thể:
+            - INVALID_PARAM: query param sai
+            - BAD_REQUEST: body không phải JSON
+            - BOOK_NOT_FOUND: không tìm thấy sách
+            - NOT_FOUND: route không tồn tại
+            - METHOD_NOT_ALLOWED: method không hỗ trợ
+            - INTERNAL_ERROR: lỗi server
+          title: code
+          type: string
+        message:
+          description: Mô tả lỗi. Có thể là string rỗng với lỗi từ errorhandler.
+          title: message
+          type: string
+      required:
+      - code
+      - message
+      title: ApiError
+      type: object
+    Book:
+      description: Một cuốn sách trong hệ thống.
+      example:
+        author: author
+        price: 1.4658129805029452
+        isbn: isbn
+        genre: fiction
+        id: 0
+        publishedYear: 6
+        title: title
+      properties:
+        id:
+          description: |-
+            ID tự tăng, do server gán: len(BOOKS) + 1.
+            Readonly — không truyền khi tạo/cập nhật.
+          format: int32
+          readOnly: true
+          title: id
+          type: integer
+        title:
+          title: title
+          type: string
+        author:
+          title: author
+          type: string
+        isbn:
+          description: Có thể null nếu không cung cấp khi tạo.
+          nullable: true
+          title: isbn
+          type: string
+        genre:
+          $ref: "#/components/schemas/Genre"
+        publishedYear:
+          description: Năm xuất bản. Có thể null.
+          format: int32
+          nullable: true
+          title: publishedYear
+          type: integer
+        price:
+          description: Giá sách. Có thể null.
+          format: double
+          nullable: true
+          title: price
+          type: number
+      required:
+      - author
+      - genre
+      - id
+      - title
+      title: Book
+      type: object
+    BookListResponse:
+      description: Response của GET /v1/books.
+      example:
+        pagination:
+          total: 2
+          limit: 5
+          totalPages: 7
+          page: 5
+        data:
+        - author: author
+          price: 1.4658129805029452
+          isbn: isbn
+          genre: fiction
+          id: 0
+          publishedYear: 6
+          title: title
+        - author: author
+          price: 1.4658129805029452
+          isbn: isbn
+          genre: fiction
+          id: 0
+          publishedYear: 6
+          title: title
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/Book"
+          title: data
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+      required:
+      - data
+      - pagination
+      title: BookListResponse
+      type: object
+    CreateBookRequest:
+      description: |-
+        Body để tạo sách mới (POST /v1/books).
+
+        QUAN TRỌNG: `title`, `author`, `genre` là bắt buộc theo logic app.py
+        (truy cập trực tiếp data["title"] v.v.). Thiếu các field này sẽ gây
+        KeyError → HTTP 500 vì không có validation tại tầng app.
+      example:
+        author: author
+        price: 6.027456183070403
+        isbn: isbn
+        genre: fiction
+        publishedYear: 0
+        title: title
+      properties:
+        title:
+          title: title
+          type: string
+        author:
+          title: author
+          type: string
+        isbn:
+          title: isbn
+          type: string
+        genre:
+          $ref: "#/components/schemas/Genre"
+        publishedYear:
+          format: int32
+          title: publishedYear
+          type: integer
+        price:
+          format: double
+          title: price
+          type: number
+      required:
+      - author
+      - genre
+      - title
+      title: CreateBookRequest
+      type: object
+    Genre:
+      description: |-
+        Thể loại sách hợp lệ.
+        Tương ứng với VALID_GENRES = {"fiction", "non-fiction", "sci-fi", "history", "biography"}
+        trong app.py. GET /v1/books trả về 400 nếu genre không thuộc tập này.
+      enum:
+      - fiction
+      - non-fiction
+      - sci-fi
+      - history
+      - biography
+      title: Genre
+      type: string
+    Pagination:
+      description: Metadata phân trang trả về cùng BookListResponse.
+      example:
+        total: 2
+        limit: 5
+        totalPages: 7
+        page: 5
+      properties:
+        page:
+          description: "Trang hiện tại (input page sau khi clamp: max(1, page))."
+          format: int32
+          title: page
+          type: integer
+        limit:
+          description: "Số bản ghi/trang (input limit sau khi clamp vào [1, 100])."
+          format: int32
+          title: limit
+          type: integer
+        total:
+          description: Tổng số sách sau khi áp dụng filter genre và q.
+          format: int32
+          title: total
+          type: integer
+        totalPages:
+          description: "max(1, ceil(total / limit))"
+          format: int32
+          title: totalPages
+          type: integer
+      required:
+      - limit
+      - page
+      - total
+      - totalPages
+      title: Pagination
+      type: object
+    UpdateBookRequest:
+      description: |-
+        Body để cập nhật sách (PUT /v1/books/{book_id}).
+
+        PUT thay thế toàn bộ — `title`, `author`, `genre` bắt buộc.
+        `isbn`, `publishedYear`, `price` optional: server giữ nguyên
+        giá trị cũ nếu không truyền (data.get("isbn", book.get("isbn"))).
+      example:
+        author: author
+        price: 6.027456183070403
+        isbn: isbn
+        genre: fiction
+        publishedYear: 0
+        title: title
+      properties:
+        title:
+          title: title
+          type: string
+        author:
+          title: author
+          type: string
+        isbn:
+          description: "Nếu bỏ qua, giữ giá trị cũ của sách."
+          title: isbn
+          type: string
+        genre:
+          $ref: "#/components/schemas/Genre"
+        publishedYear:
+          description: "Nếu bỏ qua, giữ giá trị cũ của sách."
+          format: int32
+          title: publishedYear
+          type: integer
+        price:
+          description: "Nếu bỏ qua, giữ giá trị cũ của sách."
+          format: double
+          title: price
+          type: number
+      required:
+      - author
+      - genre
+      - title
+      title: UpdateBookRequest
+      type: object
+    Root_ping_200_response:
+      example:
+        msg: msg
+      properties:
+        msg:
+          title: msg
+          type: string
+      required:
+      - msg
+      title: Root_ping_200_response
+      type: object

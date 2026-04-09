@@ -1,7 +1,9 @@
 import random
 from datetime import datetime, timedelta
+import time
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import insert
 
 # 1. Initialize Flask App and Database Config
 app = Flask(__name__)
@@ -43,76 +45,51 @@ class Transaction(db.Model):
     status = db.Column(db.String(20), default='borrowed') 
 
 # 3. Seeding Function
-def seed_database():
+def seed_database_massive(total_records=10_000_000, batch_size=50_000):
     with app.app_context():
-        print("Dropping old tables...")
+        print("--- Bắt đầu quá trình Seeding quy mô lớn ---")
         db.drop_all()
-        
-        print("Creating new tables...")
         db.create_all()
 
-        print("Seeding Authors...")
-        authors = [
-            Author(name="George Orwell"),
-            Author(name="J.K. Rowling"),
-            Author(name="J.R.R. Tolkien"),
-            Author(name="Agatha Christie")
-        ]
-        db.session.add_all(authors)
+        # 1. Tối ưu hóa SQLite để ghi thần tốc
+        db.session.execute(db.text("PRAGMA synchronous = OFF"))
+        db.session.execute(db.text("PRAGMA journal_mode = WAL"))
+
+        # 2. Tạo dữ liệu gốc (Authors & Users)
+        authors = [Author(name=f"Author {i}") for i in range(1, 1001)]
+        users = [User(name=f"User {i}", email=f"user{i}@test.com") for i in range(1, 10001)]
+        db.session.add_all(authors + users)
         db.session.commit()
-
-        print("Seeding Users...")
-        users = [
-            User(name="Alice Smith", email="alice@example.com"),
-            User(name="Bob Johnson", email="bob@example.com"),
-            User(name="Charlie Brown", email="charlie@example.com")
-        ]
-        db.session.add_all(users)
-        db.session.commit()
-
-        print("Seeding Books...")
-        books = []
-        # Create 50 mock books to help test pagination
-        for i in range(1, 51):
-            random_author = random.choice(authors)
-            book = Book(
-                title=f"Sample Book Title {i}",
-                status="available",
-                author_id=random_author.id
-            )
-            books.append(book)
-        db.session.add_all(books)
-        db.session.commit()
-
-        print("Seeding Transactions...")
-        # Simulate Alice borrowing Book #1 (currently borrowed)
-        t1 = Transaction(
-            user_id=users[0].id,
-            book_id=books[0].id,
-            borrow_date=datetime.utcnow() - timedelta(days=5),
-            due_date=datetime.utcnow() + timedelta(days=9),
-            status="borrowed"
-        )
-        books[0].status = "borrowed" # Update book status
-
-        # Simulate Bob borrowing Book #2 and returning it early
-        t2 = Transaction(
-            user_id=users[1].id,
-            book_id=books[1].id,
-            borrow_date=datetime.utcnow() - timedelta(days=20),
-            due_date=datetime.utcnow() - timedelta(days=6),
-            return_date=datetime.utcnow() - timedelta(days=10),
-            status="returned"
-        )
         
-        db.session.add_all([t1, t2])
-        db.session.commit()
+        author_ids = [a.id for a in authors]
+        user_ids = [u.id for u in users]
 
-        print(f"✅ Database initialized successfully!")
-        print(f"-> Created {Author.query.count()} Authors")
-        print(f"-> Created {User.query.count()} Users")
-        print(f"-> Created {Book.query.count()} Books")
-        print(f"-> Created {Transaction.query.count()} Transactions")
+        # 3. Seeding 10 triệu Books bằng phương pháp Batching
+        print(f"Đang tạo {total_records} bản ghi Book...")
+        start_time = time.time()
+        
+        for i in range(0, total_records, batch_size):
+            batch = []
+            for j in range(i, min(i + batch_size, total_records)):
+                batch.append({
+                    "title": f"Book Title {j}",
+                    "status": "available",
+                    "author_id": random.choice(author_ids)
+                })
+            
+            # Sử dụng Bulk Insert (Insert trực tiếp Dictionary để bỏ qua overhead của Model)
+            db.session.execute(insert(Book), batch)
+            
+            # Commit theo từng đợt để giải phóng RAM
+            if (i + batch_size) % (batch_size * 10) == 0:
+                db.session.commit()
+                elapsed = time.time() - start_time
+                print(f"Đã xong: {i + batch_size:,} / {total_records:,} bản ghi ({elapsed:.2f}s)")
+
+        db.session.commit()
+        
+        total_time = time.time() - start_time
+        print(f"✅ Hoàn thành! Tổng thời gian: {total_time/60:.2f} phút")
 
 if __name__ == '__main__':
-    seed_database()
+    seed_database_massive()
