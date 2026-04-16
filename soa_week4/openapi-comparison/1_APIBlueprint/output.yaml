@@ -1,0 +1,640 @@
+openapi: 3.0.0
+info:
+  title: Book Management API
+  version: ""
+  description: >-
+    API quản lý sách đơn giản viết bằng Flask. Hỗ trợ tìm kiếm, lọc theo thể
+    loại,
+
+    phân trang, và các thao tác CRUD cơ bản.
+
+
+    **Base path:** `/v1`
+
+
+    ## Lưu ý về kiểu dữ liệu
+
+
+    - `book_id` trong URL là **integer** (vd: `1`, `2`), không phải string.
+
+
+    - `GET /v1/books/<book_id>` và `PUT`, `DELETE` tương tự — Flask nhận string từ URL
+      nhưng BOOKS store dùng integer key.
+
+    - Các field `isbn`, `publishedYear`, `price` là **optional** khi tạo/cập nhật sách.
+
+
+    ---
+
+
+    ## Mã lỗi
+
+
+    | Code | HTTP | Mô tả |
+
+    |---|---|---|
+
+    | `INVALID_PARAM` | 400 | Query param sai kiểu hoặc giá trị không hợp lệ |
+
+    | `BAD_REQUEST` | 400 | Request body không phải JSON hợp lệ |
+
+    | `BOOK_NOT_FOUND` | 404 | Không tìm thấy sách với ID đã cho |
+
+    | `NOT_FOUND` | 404 | Route không tồn tại |
+
+    | `METHOD_NOT_ALLOWED` | 405 | HTTP method không được hỗ trợ |
+
+    | `INTERNAL_ERROR` | 500 | Lỗi server nội bộ |
+
+
+    ---
+paths:
+  /v1/books:
+    get:
+      responses:
+        "200":
+          description: OK
+          headers: {}
+          content:
+            "*/*":
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        title:
+                          type: string
+                        author:
+                          type: string
+                        isbn:
+                          type: string
+                        genre:
+                          type: string
+                        publishedYear:
+                          type: number
+                        price:
+                          type: number
+                      required:
+                        - id
+                        - title
+                        - author
+                        - isbn
+                        - genre
+                        - publishedYear
+                        - price
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: number
+                      limit:
+                        type: number
+                      total:
+                        type: number
+                      totalPages:
+                        type: number
+                example:
+                  data:
+                    - id: 1
+                      title: Dune
+                      author: Frank Herbert
+                      isbn: 978-0-441-01359-8
+                      genre: sci-fi
+                      publishedYear: 1965
+                      price: 14.99
+                    - id: 5
+                      title: Ender's Game
+                      author: Orson Scott Card
+                      isbn: 978-0-8125-5070-6
+                      genre: sci-fi
+                      publishedYear: 1985
+                      price: 11.99
+                  pagination:
+                    page: 1
+                    limit: 20
+                    total: 2
+                    totalPages: 1
+      summary: Lấy danh sách sách
+      operationId: Lấy danh sách sách
+      description: >-
+        Trả về danh sách sách có hỗ trợ phân trang, lọc theo thể loại và tìm
+        kiếm
+
+        full-text (không phân biệt hoa thường) trên `title` và `author`.
+
+
+        Thứ tự filter: genre trước → q sau → paginate.
+      tags: []
+      parameters:
+        - name: page
+          in: query
+          description: "Số trang, tối thiểu 1. Default: 1"
+          required: false
+          example: "1"
+          schema:
+            type: number
+        - name: limit
+          in: query
+          description: "Số bản ghi/trang, clamp vào [1, 100]. Default: 20"
+          required: false
+          example: "20"
+          schema:
+            type: number
+        - name: genre
+          in: query
+          description: Lọc theo thể loại chính xác
+          required: false
+          example: sci-fi
+          schema:
+            type: string
+            enum:
+              - fiction
+              - non
+              - sci
+              - history
+              - biography
+        - name: q
+          in: query
+          description: Tìm kiếm trong `title` hoặc `author` (case-insensitive, substring
+            match)
+          required: false
+          schema:
+            type: string
+    post:
+      responses:
+        "200":
+          description: OK
+          headers: {}
+        "201":
+          description: Created
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  title:
+                    type: string
+                  author:
+                    type: string
+                  isbn:
+                    type: string
+                  genre:
+                    type: string
+                  publishedYear:
+                    type: number
+                  price:
+                    type: number
+                example:
+                  id: 6
+                  title: The Hobbit
+                  author: J.R.R. Tolkien
+                  isbn: 978-0-261-10221-7
+                  genre: fiction
+                  publishedYear: 1937
+                  price: 13.99
+              examples:
+                response:
+                  value:
+                    id: 6
+                    title: The Hobbit
+                    author: J.R.R. Tolkien
+                    isbn: 978-0-261-10221-7
+                    genre: fiction
+                    publishedYear: 1937
+                    price: 13.99
+      summary: Tạo sách mới
+      operationId: Tạo sách mới
+      description: >-
+        Tạo một cuốn sách mới. `id` được server tự gán bằng `len(BOOKS) + 1`.
+
+
+        **Lưu ý:** Nếu `title`, `author`, hoặc `genre` vắng mặt trong body, server sẽ
+
+        raise `KeyError` và trả về 500 (thiếu validation ở tầng app).
+      tags: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                author:
+                  type: string
+                isbn:
+                  type: string
+                genre:
+                  type: string
+                publishedYear:
+                  type: number
+                price:
+                  type: number
+              example:
+                title: The Hobbit
+                author: J.R.R. Tolkien
+                isbn: 978-0-261-10221-7
+                genre: fiction
+                publishedYear: 1937
+                price: 13.99
+  "/v1/books/{book_id}":
+    get:
+      responses:
+        "200":
+          description: OK
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  title:
+                    type: string
+                  author:
+                    type: string
+                  isbn:
+                    type: string
+                  genre:
+                    type: string
+                  publishedYear:
+                    type: number
+                  price:
+                    type: number
+                example:
+                  id: 1
+                  title: Dune
+                  author: Frank Herbert
+                  isbn: 978-0-441-01359-8
+                  genre: sci-fi
+                  publishedYear: 1965
+                  price: 14.99
+              examples:
+                response:
+                  value:
+                    id: 1
+                    title: Dune
+                    author: Frank Herbert
+                    isbn: 978-0-441-01359-8
+                    genre: sci-fi
+                    publishedYear: 1965
+                    price: 14.99
+        "404":
+          description: Not Found
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                example:
+                  code: BOOK_NOT_FOUND
+                  message: Cannot find book with this id
+              examples:
+                response:
+                  value:
+                    code: BOOK_NOT_FOUND
+                    message: Cannot find book with this id
+      summary: Lấy thông tin sách
+      operationId: Lấy thông tin sách
+      description: ""
+      tags: []
+      parameters:
+        - name: book_id
+          in: path
+          description: ID của sách (integer)
+          required: true
+          example: "1"
+          schema:
+            type: number
+    put:
+      responses:
+        "200":
+          description: OK
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  title:
+                    type: string
+                  author:
+                    type: string
+                  isbn:
+                    type: string
+                  genre:
+                    type: string
+                  publishedYear:
+                    type: number
+                  price:
+                    type: number
+                example:
+                  id: 1
+                  title: Dune Messiah
+                  author: Frank Herbert
+                  isbn: 978-0-441-01359-8
+                  genre: sci-fi
+                  publishedYear: 1969
+                  price: 13.99
+              examples:
+                response:
+                  value:
+                    id: 1
+                    title: Dune Messiah
+                    author: Frank Herbert
+                    isbn: 978-0-441-01359-8
+                    genre: sci-fi
+                    publishedYear: 1969
+                    price: 13.99
+        "400":
+          description: Bad Request
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                example:
+                  code: BAD_REQUEST
+                  message: Request body must be JSON
+              examples:
+                response:
+                  value:
+                    code: BAD_REQUEST
+                    message: Request body must be JSON
+        "404":
+          description: Not Found
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                example:
+                  code: BOOK_NOT_FOUND
+                  message: Cannot find book with this id
+              examples:
+                response:
+                  value:
+                    code: BOOK_NOT_FOUND
+                    message: Cannot find book with this id
+      summary: Cập nhật sách
+      operationId: Cập nhật sách
+      description: >-
+        Thay thế toàn bộ dữ liệu sách. Các field optional (`isbn`,
+        `publishedYear`, `price`)
+
+        sẽ giữ nguyên giá trị cũ nếu không được truyền trong body.
+
+
+        `title`, `author`, `genre` là bắt buộc — thiếu sẽ raise `KeyError` → 500.
+      tags: []
+      parameters:
+        - name: book_id
+          in: path
+          description: ID của sách (integer)
+          required: true
+          example: "1"
+          schema:
+            type: number
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                author:
+                  type: string
+                genre:
+                  type: string
+                publishedYear:
+                  type: number
+                price:
+                  type: number
+              example:
+                title: Dune Messiah
+                author: Frank Herbert
+                genre: sci-fi
+                publishedYear: 1969
+                price: 13.99
+    delete:
+      responses:
+        "204":
+          description: No Content
+          headers: {}
+        "404":
+          description: Not Found
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                example:
+                  code: BOOK_NOT_FOUND
+                  message: Cannot find book with this id
+              examples:
+                response:
+                  value:
+                    code: BOOK_NOT_FOUND
+                    message: Cannot find book with this id
+      summary: Xóa sách
+      operationId: Xóa sách
+      description: ""
+      tags: []
+      parameters:
+        - name: book_id
+          in: path
+          description: ID của sách (integer)
+          required: true
+          example: "1"
+          schema:
+            type: number
+  /:
+    get:
+      responses:
+        "200":
+          description: OK
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  msg:
+                    type: string
+                example:
+                  msg: This was not a triumph
+              examples:
+                response:
+                  value:
+                    msg: This was not a triumph
+      summary: Ping
+      operationId: Ping
+      description: Endpoint kiểm tra server còn sống. Không thuộc prefix `/v1`.
+      tags:
+        - Health Check
+tags:
+  - name: Books
+  - name: Health Check
+servers:
+  - url: http://localhost:5000
+components:
+  schemas:
+    Book:
+      type: object
+      required:
+        - id
+        - title
+        - author
+        - genre
+      properties:
+        id:
+          type: number
+          example: 1
+          description: ID tự tăng, do server gán
+        title:
+          type: string
+          example: Dune
+        author:
+          type: string
+          example: Frank Herbert
+        isbn:
+          type: string
+          example: 978-0-441-01359-8
+          description: Có thể null
+        genre:
+          type: string
+          enum:
+            - fiction
+            - non
+            - sci
+            - history
+            - biography
+        publishedYear:
+          type: number
+          example: 1965
+          description: Có thể null
+        price:
+          type: number
+          example: 14.99
+          description: Có thể null
+    CreateBookRequest:
+      type: object
+      required:
+        - title
+        - author
+        - genre
+      properties:
+        title:
+          type: string
+          example: Dune
+        author:
+          type: string
+          example: Frank Herbert
+        isbn:
+          type: string
+          example: 978-0-441-01359-8
+        genre:
+          type: string
+          example: sci-fi
+          description: Phải thuộc VALID_GENRES
+        publishedYear:
+          type: number
+          example: 1965
+        price:
+          type: number
+          example: 14.99
+    UpdateBookRequest:
+      type: object
+      required:
+        - title
+        - author
+        - genre
+      properties:
+        title:
+          type: string
+          example: Dune
+          description: PUT thay thế toàn bộ, title bắt buộc
+        author:
+          type: string
+          example: Frank Herbert
+        isbn:
+          type: string
+          example: 978-0-441-01359-8
+          description: Giữ giá trị cũ nếu không truyền
+        genre:
+          type: string
+          example: sci-fi
+        publishedYear:
+          type: number
+          example: 1965
+          description: Giữ giá trị cũ nếu không truyền
+        price:
+          type: number
+          example: 14.99
+          description: Giữ giá trị cũ nếu không truyền
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: number
+          example: 1
+          description: Trang hiện tại
+        limit:
+          type: number
+          example: 20
+          description: Số bản ghi mỗi trang (clamp 1–100)
+        total:
+          type: number
+          example: 5
+          description: Tổng số sách sau khi filter
+        totalPages:
+          type: number
+          example: 1
+          description: max(1, ceil(total / limit))
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: BOOK_NOT_FOUND
+        message:
+          type: string
+          example: Cannot find book with this id
+    Root: {}
+    Danh_s_ch_s_ch: {}
+    S_ch_theo_ID: {}

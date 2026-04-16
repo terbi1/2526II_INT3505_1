@@ -2,6 +2,7 @@ import jwt
 import datetime
 from flask import Flask, request, jsonify
 from functools import wraps
+import secrets
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'super_duper_secret_key'
@@ -82,7 +83,7 @@ def refresh():
         user_id = data['user_id']
         user = users[user_id]
         new_access, _ = create_tokens(user_id, user['role'], user['scopes'])
-        return jsonify({"access_token": new_access})
+        return jsonify({"access_token": new_access,"user_id":user_id, "role": user["role"], "scope": user["scope"]})
     except:
         return jsonify({"msg": "Refresh token invalid"}), 401
 
@@ -95,3 +96,61 @@ def admin_api(current_user):
 @authorize(required_scope="write")
 def write_api(current_user):
     return jsonify({"msg": f"User {current_user} có quyền Ghi (Scope: write)"})
+
+opaque_token_store = {}
+
+def opaque_token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            token = auth_header.split(" ")[1] if " " in auth_header else None
+
+        if not token:
+            return jsonify({"msg": "Missing Opaque Token"}), 401
+
+        user_id = opaque_token_store.get(token)
+        
+        if not user_id:
+            return jsonify({"msg": "Opaque Token không tồn tại hoặc đã bị thu hồi"}), 401
+
+        return f(user_id, *args, **kwargs)
+    return decorated
+
+# ==========================================
+# OPAQUE TOKEN: ENDPOINTS
+# ==========================================
+@app.route('/login-opaque', methods=['POST'])
+def login_opaque():
+    auth = request.json
+    user = users.get(auth.get('username'))
+    
+    if user and user['password'] == auth.get('password'):
+        opaque_token = secrets.token_hex(32)
+        
+        opaque_token_store[opaque_token] = auth['username']
+        
+        return jsonify({
+            "token_type": "Bearer",
+            "opaque_token": opaque_token,
+        })
+    
+    return jsonify({"msg": "Wrong credentials"}), 401
+
+@app.route('/opaque-data')
+@opaque_token_required
+def opaque_api(current_user):
+    return jsonify({
+        "msg": f"Hi {current_user}!"
+    })
+
+@app.route('/logout-opaque', methods=['POST'])
+@opaque_token_required
+def logout_opaque(current_user):
+    token = request.headers['Authorization'].split(" ")[1]
+    
+    if token in opaque_token_store:
+        del opaque_token_store[token]
+        
+    return jsonify({"msg": f"Logged out {current_user} and revoked token!"})

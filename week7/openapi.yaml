@@ -1,0 +1,92 @@
+openapi: "3.0.0"
+info:
+  title: Product API
+  version: "1.0.0"
+
+paths:
+  /products:
+    get:
+      summary: Lấy danh sách sản phẩm
+      operationId: products.get_all
+      responses:
+        "200":
+          description: Thành công
+    post:
+      summary: Tạo sản phẩm mới
+      operationId: products.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Tạo thành công
+
+  /products/{product_id}:
+    get:
+      summary: Lấy 1 sản phẩm
+      operationId: products.get_one
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thành công
+        "404":
+          description: Không tìm thấy
+    put:
+      summary: Cập nhật sản phẩm
+      operationId: products.update
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Cập nhật thành công
+    delete:
+      summary: Xóa sản phẩm
+      operationId: products.delete
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa thành công
+
+components:
+  schemas:
+    ProductInput:
+      type: object
+      required:
+        - name
+        - price
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+          minimum: 0
+        description:
+          type: string
+          default: ""
+        stock:
+          type: integer
+          default: 0
+          minimum: 0

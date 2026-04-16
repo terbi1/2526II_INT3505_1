@@ -1,0 +1,531 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Book Management API",
+    "version": "v1",
+    "description": "API quản lý sách đơn giản viết bằng Flask.\nHỗ trợ tìm kiếm, lọc theo thể loại, phân trang và CRUD.\n"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/{version}",
+      "variables": {
+        "version": {
+          "default": "version"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "msg": "This was not a triumph"
+                  },
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "example": "This was not a triumph",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "msg"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Kiểm tra server hoạt động. Trả về chuỗi cố định.",
+        "operationId": "GET_root"
+      }
+    },
+    "/books": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Danh sách sách và metadata phân trang",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/trait_paginated_400"
+          }
+        },
+        "description": "Lấy danh sách sách với phân trang, lọc genre và tìm kiếm.\n\n**Thứ tự xử lý:** lọc genre → lọc q → paginate.\n\nTìm kiếm `q` là substring match, case-insensitive trên `title` và `author`.\n",
+        "operationId": "GET_books",
+        "parameters": [
+          {
+            "name": "genre",
+            "in": "query",
+            "description": "Lọc chính xác theo thể loại (so sánh ==)",
+            "schema": {
+              "$ref": "#/components/schemas/Genre"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Tìm kiếm trong title hoặc author (case-insensitive, strip whitespace).\nBỏ trống hoặc bỏ qua = không filter.\n",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/trait_paginated_page"
+          },
+          {
+            "$ref": "#/components/parameters/trait_paginated_limit"
+          }
+        ]
+      },
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Sách được tạo thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Book"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/trait_requiresJsonBody_400"
+          }
+        },
+        "description": "Tạo sách mới. `id` = `len(BOOKS) + 1` tại thời điểm tạo.\n\n**Quan trọng:** `title`, `author`, `genre` phải có mặt trong body,\nnếu không server raise `KeyError` → 500.\n",
+        "operationId": "POST_books",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBookRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/books/{book_id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Thông tin sách",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Book"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/trait_hasBookNotFound_404"
+          }
+        },
+        "description": "Lấy thông tin chi tiết một cuốn sách theo ID.",
+        "operationId": "GET_books-book_id"
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Sách sau khi cập nhật",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Book"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/trait_requiresJsonBody_400"
+          },
+          "404": {
+            "$ref": "#/components/responses/trait_hasBookNotFound_404"
+          }
+        },
+        "description": "Thay thế toàn bộ dữ liệu sách (PUT semantics).\nCác field optional giữ giá trị cũ nếu không có trong body.\n",
+        "operationId": "PUT_books-book_id",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBookRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "responses": {
+          "204": {
+            "description": "Xóa thành công, không có body"
+          },
+          "404": {
+            "$ref": "#/components/responses/trait_hasBookNotFound_404"
+          }
+        },
+        "description": "Xóa sách khỏi store. Không có response body.",
+        "operationId": "DELETE_books-book_id"
+      },
+      "parameters": [
+        {
+          "name": "book_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "ID của sách trong URL (Flask truyền vào là string,\nnhưng BOOKS dùng integer key — cần cast khi lookup).\n"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "Genre": {
+        "description": "Thể loại sách hợp lệ (VALID_GENRES trong app.py)",
+        "enum": [
+          "fiction",
+          "non-fiction",
+          "sci-fi",
+          "history",
+          "biography"
+        ],
+        "type": "string"
+      },
+      "Book": {
+        "description": "Một cuốn sách trong hệ thống.\n`isbn`, `publishedYear`, `price` có thể là null.\n",
+        "example": {
+          "id": 1,
+          "title": "Dune",
+          "author": "Frank Herbert",
+          "isbn": "978-0-441-01359-8",
+          "genre": "sci-fi",
+          "publishedYear": 1965,
+          "price": 14.99
+        },
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "ID tự tăng, do server gán khi tạo",
+            "example": 1,
+            "type": "integer"
+          },
+          "title": {
+            "example": "Dune",
+            "type": "string"
+          },
+          "author": {
+            "example": "Frank Herbert",
+            "type": "string"
+          },
+          "isbn": {
+            "example": "978-0-441-01359-8",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "nil"
+              }
+            ]
+          },
+          "genre": {
+            "example": "sci-fi",
+            "$ref": "#/components/schemas/Genre"
+          },
+          "publishedYear": {
+            "example": 1965,
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "nil"
+              }
+            ]
+          },
+          "price": {
+            "example": 14.99,
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "nil"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "author",
+          "genre"
+        ]
+      },
+      "CreateBookRequest": {
+        "description": "Body để tạo sách mới. `title`, `author`, `genre` bắt buộc —\nthiếu sẽ raise KeyError ở server và trả về 500.\n",
+        "example": {
+          "title": "The Hobbit",
+          "author": "J.R.R. Tolkien",
+          "isbn": "978-0-261-10221-7",
+          "genre": "fiction",
+          "publishedYear": 1937,
+          "price": 13.99
+        },
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "isbn": {
+            "type": "string"
+          },
+          "genre": {
+            "$ref": "#/components/schemas/Genre"
+          },
+          "publishedYear": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "genre"
+        ]
+      },
+      "UpdateBookRequest": {
+        "description": "Body cho PUT — thay thế toàn bộ sách.\n`title`, `author`, `genre` bắt buộc.\n`isbn`, `publishedYear`, `price` optional: giữ giá trị cũ nếu không truyền.\n",
+        "example": {
+          "title": "Dune Messiah",
+          "author": "Frank Herbert",
+          "genre": "sci-fi",
+          "publishedYear": 1969,
+          "price": 13.99
+        },
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "isbn": {
+            "description": "Giữ giá trị cũ nếu bỏ qua",
+            "type": "string"
+          },
+          "genre": {
+            "$ref": "#/components/schemas/Genre"
+          },
+          "publishedYear": {
+            "description": "Giữ giá trị cũ nếu bỏ qua",
+            "type": "integer"
+          },
+          "price": {
+            "description": "Giữ giá trị cũ nếu bỏ qua",
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "author",
+          "genre"
+        ]
+      },
+      "Pagination": {
+        "description": "Metadata phân trang đính kèm trong response của GET /books",
+        "example": {
+          "page": 1,
+          "limit": 20,
+          "total": 5,
+          "totalPages": 1
+        },
+        "type": "object",
+        "properties": {
+          "page": {
+            "description": "Trang hiện tại",
+            "example": 1,
+            "type": "integer"
+          },
+          "limit": {
+            "description": "Số bản ghi mỗi trang (đã clamp vào [1, 100])",
+            "example": 20,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Tổng số sách sau khi áp dụng filter",
+            "example": 5,
+            "type": "integer"
+          },
+          "totalPages": {
+            "description": "max(1, ceil(total / limit))",
+            "example": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ]
+      },
+      "BookListResponse": {
+        "description": "Response của GET /v1/books",
+        "example": {
+          "data": [
+            {
+              "id": 1,
+              "title": "Dune",
+              "author": "Frank Herbert",
+              "isbn": "978-0-441-01359-8",
+              "genre": "sci-fi",
+              "publishedYear": 1965,
+              "price": 14.99
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "limit": 20,
+            "total": 1,
+            "totalPages": 1
+          }
+        },
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Book"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "ErrorResponse": {
+        "description": "Cấu trúc lỗi chuẩn từ hàm make_error()",
+        "example": {
+          "code": "BOOK_NOT_FOUND",
+          "message": "Cannot find book with this id"
+        },
+        "type": "object",
+        "properties": {
+          "code": {
+            "description": "Mã lỗi định danh",
+            "example": "BOOK_NOT_FOUND",
+            "type": "string"
+          },
+          "message": {
+            "description": "Mô tả lỗi (có thể rỗng với lỗi 404/405/500 từ errorhandler)",
+            "example": "Cannot find book with this id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      }
+    },
+    "responses": {
+      "trait_hasBookNotFound_404": {
+        "description": "Không tìm thấy sách với book_id đã cho",
+        "content": {
+          "application/json": {
+            "example": {
+              "code": "BOOK_NOT_FOUND",
+              "message": "Cannot find book with this id"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "trait_requiresJsonBody_400": {
+        "description": "Request body không phải JSON object hợp lệ",
+        "content": {
+          "application/json": {
+            "example": {
+              "code": "BAD_REQUEST",
+              "message": "Request body must be JSON"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "trait_paginated_400": {
+        "description": "page hoặc limit không parse được thành integer",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "trait_paginated_page": {
+        "name": "page",
+        "in": "query",
+        "description": "Số trang, tối thiểu 1 (clamp bằng max(1, ...))",
+        "schema": {
+          "default": 1,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "trait_paginated_limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Số bản ghi/trang, clamp vào [1, 100]",
+        "schema": {
+          "default": 20,
+          "minimum": 1,
+          "maximum": 100,
+          "type": "integer"
+        }
+      }
+    },
+    "examples": {},
+    "requestBodies": {},
+    "headers": {},
+    "securitySchemes": {},
+    "links": {},
+    "callbacks": {}
+  }
+}

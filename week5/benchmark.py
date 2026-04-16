@@ -66,7 +66,7 @@ def benchmark(strategies, depths, reps, limit):
     print(f"\n{c('header', 'Pagination benchmark')}")
     print(c("dim", f"depths={depths}  reps={reps}  limit={limit}\n"))
 
-    header = f"{'Strategy':<14} {'Depth':>6} {'Avg ms':>8} {'P95 ms':>8} {'Min ms':>8} {'Max ms':>8} {'StdDev':>8} {'Errors':>7}"
+    header = f"{'Strategy':<14} {'Depth':>6} {'Avg ms':>8} {'Min ms':>8} {'Max ms':>8} {'Errors':>7}"
     print(c("header", header))
     print(c("dim", "-" * len(header)))
 
@@ -93,10 +93,10 @@ def benchmark(strategies, depths, reps, limit):
                 avg = p95 = mn = mx = sd = None
             else:
                 avg = round(statistics.mean(latencies), 1)
-                p95 = round(sorted(latencies)[int(len(latencies) * 0.95) - 1], 1)
+                # p95 = round(sorted(latencies)[int(len(latencies) * 0.95) - 1], 1)
                 mn  = round(min(latencies), 1)
                 mx  = round(max(latencies), 1)
-                sd  = round(statistics.stdev(latencies) if len(latencies) > 1 else 0.0, 1)
+                # sd  = round(statistics.stdev(latencies) if len(latencies) > 1 else 0.0, 1)
 
             results.append({
                 "strategy":   strategy,
@@ -104,10 +104,10 @@ def benchmark(strategies, depths, reps, limit):
                 "limit":      limit,
                 "reps":       reps,
                 "avg_ms":     avg,
-                "p95_ms":     p95,
+                # "p95_ms":     p95,
                 "min_ms":     mn,
                 "max_ms":     mx,
-                "stddev_ms":  sd,
+                # "stddev_ms":  sd,
                 "errors":     errors,
                 "url_sample": url,
                 "timestamp":  datetime.now().isoformat(),
@@ -119,7 +119,7 @@ def benchmark(strategies, depths, reps, limit):
             err_display = c("error", f"{errors:>7}") if errors > 0 else f"{errors:>7}"
             row_color = "warn" if errors > 0 else strategy
             name_col = f"{strategy:<14}"
-            line = f"{c(row_color, name_col)} {depth:>6} {fmt(avg)} {fmt(p95)} {fmt(mn)} {fmt(mx)} {fmt(sd)} {err_display}"
+            line = f"{c(row_color, name_col)} {depth:>6} {fmt(avg)} {fmt(mn)} {fmt(mx)} {err_display}"
             print(line)
 
         print()
