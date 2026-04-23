@@ -6,13 +6,13 @@ info:
 paths:
   /products:
     get:
-      summary: Lấy danh sách sản phẩm
+      summary: Get products
       operationId: products.get_all
       responses:
         "200":
-          description: Thành công
+          description: Success
     post:
-      summary: Tạo sản phẩm mới
+      summary: Create new product
       operationId: products.create
       requestBody:
         required: true
@@ -22,11 +22,11 @@ paths:
               $ref: "#/components/schemas/ProductInput"
       responses:
         "201":
-          description: Tạo thành công
+          description: Created successfully
 
   /products/{product_id}:
     get:
-      summary: Lấy 1 sản phẩm
+      summary: Get product
       operationId: products.get_one
       parameters:
         - name: product_id
@@ -36,11 +36,11 @@ paths:
             type: string
       responses:
         "200":
-          description: Thành công
+          description: Success
         "404":
-          description: Không tìm thấy
+          description: Not found
     put:
-      summary: Cập nhật sản phẩm
+      summary: Update product
       operationId: products.update
       parameters:
         - name: product_id
@@ -56,9 +56,9 @@ paths:
               $ref: "#/components/schemas/ProductInput"
       responses:
         "200":
-          description: Cập nhật thành công
+          description: Updated successfully
     delete:
-      summary: Xóa sản phẩm
+      summary: Delete product
       operationId: products.delete
       parameters:
         - name: product_id
@@ -68,7 +68,7 @@ paths:
             type: string
       responses:
         "200":
-          description: Xóa thành công
+          description: Deleted successfully
 
 components:
   schemas:

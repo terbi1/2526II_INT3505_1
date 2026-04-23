@@ -1,0 +1,110 @@
+{
+	"info": {
+		"name": "Flask Task API Tests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Get All Tasks",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+							"pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+							"pm.test(\"Response time is acceptable (< 200ms)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": { "raw": "http://127.0.0.1:5000/tasks", "protocol": "http", "host": ["127", "0", "0", "1"], "port": "5000", "path": ["tasks"] }
+			}
+		},
+		{
+			"name": "2. Create New Task",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+							"pm.test(\"Task title matches input\", function () { var jsonData = pm.response.json(); pm.expect(jsonData.title).to.eql(\"Làm bài tập Newman\"); pm.environment.set(\"taskId\", jsonData.id); });"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": { "mode": "raw", "raw": "{\n    \"title\": \"Làm bài tập Newman\"\n}" },
+				"url": { "raw": "http://127.0.0.1:5000/tasks", "protocol": "http", "host": ["127", "0", "0", "1"], "port": "5000", "path": ["tasks"] }
+			}
+		},
+		{
+			"name": "3. Get Single Task",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+							"pm.test(\"Task ID is correct\", function () { var jsonData = pm.response.json(); pm.expect(jsonData.id).to.eql(pm.environment.get(\"taskId\")); });"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": { "raw": "http://127.0.0.1:5000/tasks/{{taskId}}", "protocol": "http", "host": ["127", "0", "0", "1"], "port": "5000", "path": ["tasks", "{{taskId}}"] }
+			}
+		},
+		{
+			"name": "4. Update Task",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+							"pm.test(\"Task marked as done\", function () { var jsonData = pm.response.json(); pm.expect(jsonData.done).to.be.true; });"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": { "mode": "raw", "raw": "{\n    \"done\": true\n}" },
+				"url": { "raw": "http://127.0.0.1:5000/tasks/{{taskId}}", "protocol": "http", "host": ["127", "0", "0", "1"], "port": "5000", "path": ["tasks", "{{taskId}}"] }
+			}
+		},
+		{
+			"name": "5. Delete Task",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": { "raw": "http://127.0.0.1:5000/tasks/{{taskId}}", "protocol": "http", "host": ["127", "0", "0", "1"], "port": "5000", "path": ["tasks", "{{taskId}}"] }
+			}
+		}
+	]
+}
