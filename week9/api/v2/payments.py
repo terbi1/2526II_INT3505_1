@@ -1,23 +1,3 @@
-"""
-api/v2/payments.py
-------------------
-Payment API — Version 2  (CURRENT / STABLE)
-
-Improvements over v1
---------------------
-1.  amount is now an **integer** (smallest currency unit, e.g. cents).
-    Example: 50000 = 500.00 USD  |  5000000 = 50,000 VND
-2.  currency is a **required** field.  Supported: VND USD EUR SGD JPY GBP
-3.  **Idempotency** via Idempotency-Key request header.
-    Send the same key twice → receive the same response, no duplicate charge.
-4.  payment_method field added: card | bank_transfer | e_wallet | qr_code
-5.  **Pagination** on list endpoint (page / per_page query params).
-6.  Currency / status / method **filters** on list endpoint.
-7.  **Server-side status transitions** validated against a state machine.
-8.  metadata object for storing arbitrary key-value pairs.
-9.  amount_formatted  — human-readable money string included in every response.
-10. Hard-delete removed → use PATCH to set status=cancelled.
-"""
 
 import datetime
 
@@ -38,9 +18,6 @@ from utils.versioning import active_version_headers
 
 v2_bp = Blueprint("v2", __name__, url_prefix="/api/v2")
 
-
-# ── Money formatter ───────────────────────────────────────────────────────
-
 _CURRENCY_FMT = {
     "VND": ("₫",   0, "suffix"),
     "USD": ("$",   2, "prefix"),
@@ -58,54 +35,28 @@ def _fmt_money(cents: int, currency: str) -> str:
     return f"{formatted} {sym}" if pos == "suffix" else f"{sym}{formatted}"
 
 
-# ── Serialiser ────────────────────────────────────────────────────────────
-
 def _serialise(p: dict) -> dict:
     """V2 wire format — richer, precise, multi-currency."""
     return {
         "id":               p["id"],
-        "amount":           p["amount_cents"],                   # ✅ integer
-        "currency":         p["currency"],                       # ✅ present
+        "amount":           p["amount_cents"],                   
+        "currency":         p["currency"],                       
         "amount_formatted": _fmt_money(p["amount_cents"],
-                                       p["currency"]),           # ✅ human-readable
+                                       p["currency"]),           
         "status":           p["status"],
-        "payment_method":   p.get("payment_method", "card"),    # ✅ present
+        "payment_method":   p.get("payment_method", "card"),    
         "description":      p.get("description", ""),
-        "idempotency_key":  p.get("idempotency_key"),           # ✅ present
-        "metadata":         p.get("metadata", {}),              # ✅ present
+        "idempotency_key":  p.get("idempotency_key"),           
+        "metadata":         p.get("metadata", {}),              
         "created_at":       p["created_at"],
-        "updated_at":       p.get("updated_at", p["created_at"]),# ✅ present
+        "updated_at":       p.get("updated_at", p["created_at"]),
     }
 
-
-# ── Endpoints ─────────────────────────────────────────────────────────────
 
 @v2_bp.route("/payments", methods=["GET"])
 @active_version_headers("v2")
 def list_payments():
-    """
-    [V2]  List payments with filtering and pagination.
-
-    Query params
-    ------------
-    page        int   default=1
-    per_page    int   default=10, max=100
-    status      str   pending|processing|completed|failed|cancelled
-    currency    str   VND|USD|EUR|…
-    method      str   card|bank_transfer|e_wallet|qr_code
-    ---
-    tags:
-      - Payments (v2 — current)
-    parameters:
-      - {name: page,     in: query, schema: {type: integer, default: 1}}
-      - {name: per_page, in: query, schema: {type: integer, default: 10}}
-      - {name: status,   in: query, schema: {type: string}}
-      - {name: currency, in: query, schema: {type: string}}
-      - {name: method,   in: query, schema: {type: string}}
-    responses:
-      200:
-        description: Paginated list of payments
-    """
+    
     page     = max(1, request.args.get("page",     1,  type=int))
     per_page = min(100, max(1, request.args.get("per_page", 10, type=int)))
 
@@ -156,68 +107,7 @@ def list_payments():
 @v2_bp.route("/payments", methods=["POST"])
 @active_version_headers("v2")
 def create_payment():
-    """
-    [V2]  Create a payment.
-
-    Request headers
-    ---------------
-    Idempotency-Key  (optional)  —  A unique string (8–128 chars).
-        If you send the same key twice, the original response is
-        returned without creating a duplicate record.
-
-    Request body (v2)
-    -----------------
-    {
-      "amount":         <integer>  — smallest currency unit (required)
-      "currency":       <string>   — ISO 4217 code (required)
-      "payment_method": <string>   — card|bank_transfer|e_wallet|qr_code
-      "description":    <string>   — optional
-      "metadata":       <object>   — optional key-value store
-    }
-
-    Breaking changes from v1
-    ------------------------
-    • amount  must be integer  (was float)
-    • currency  is required    (was implicit VND)
-    ---
-    tags:
-      - Payments (v2 — current)
-    parameters:
-      - name: Idempotency-Key
-        in: header
-        schema:
-          type: string
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [amount, currency]
-            properties:
-              amount:
-                type: integer
-                example: 15000050
-              currency:
-                type: string
-                example: VND
-              payment_method:
-                type: string
-                example: card
-              description:
-                type: string
-              metadata:
-                type: object
-    responses:
-      201:
-        description: Payment created
-      200:
-        description: Idempotent replay — payment already existed
-      422:
-        description: Validation error
-      409:
-        description: Idempotency key collision
-    """
+    
     body = request.get_json(silent=True) or {}
 
     # ── Idempotency check ─────────────────────────────────────────────
@@ -247,18 +137,16 @@ def create_payment():
                 resp.headers["X-API-Version"]         = "v2"
                 return resp
 
-    # ── Validation ────────────────────────────────────────────────────
     method_val = body.get("payment_method")
     field_errs = collect_errors({
         "amount":         (body.get("amount"),   validate_amount_cents),
         "currency":       (body.get("currency"), validate_currency),
         "payment_method": (method_val,           validate_payment_method,
-                           False),   # optional
+                           False),
     })
     if field_errs:
         return validation_error(field_errs)
 
-    # ── Create record ─────────────────────────────────────────────────
     pid = new_id("pay_")
     record = {
         "id":               pid,
@@ -283,23 +171,7 @@ def create_payment():
 @v2_bp.route("/payments/<payment_id>", methods=["GET"])
 @active_version_headers("v2")
 def get_payment(payment_id: str):
-    """
-    [V2]  Retrieve a single payment by ID.
-    ---
-    tags:
-      - Payments (v2 — current)
-    parameters:
-      - name: payment_id
-        in: path
-        required: true
-        schema:
-          type: string
-    responses:
-      200:
-        description: Payment detail
-      404:
-        description: Not found
-    """
+    
     p = payments_db.get(payment_id)
     if not p:
         return not_found("Payment", payment_id)
@@ -309,55 +181,13 @@ def get_payment(payment_id: str):
 @v2_bp.route("/payments/<payment_id>", methods=["PATCH"])
 @active_version_headers("v2")
 def update_payment(payment_id: str):
-    """
-    [V2]  Update payment status or metadata.
-
-    Status transitions (state machine)
-    -----------------------------------
-    pending    → processing | cancelled
-    processing → completed  | failed
-    failed     → pending    (retry)
-    completed  → (terminal)
-    cancelled  → (terminal)
-
-    Body fields
-    -----------
-    status    string  — new target status
-    metadata  object  — merged into existing metadata
-    ---
-    tags:
-      - Payments (v2 — current)
-    parameters:
-      - name: payment_id
-        in: path
-        required: true
-        schema:
-          type: string
-    requestBody:
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              status:
-                type: string
-              metadata:
-                type: object
-    responses:
-      200:
-        description: Updated payment
-      404:
-        description: Not found
-      409:
-        description: Invalid status transition
-    """
+    
     p = payments_db.get(payment_id)
     if not p:
         return not_found("Payment", payment_id)
 
     body = request.get_json(silent=True) or {}
 
-    # ── Status transition ─────────────────────────────────────────────
     if "status" in body:
         new_status  = body["status"]
         cur_status  = p["status"]
@@ -377,7 +207,6 @@ def update_payment(payment_id: str):
                      metadata={"from": cur_status, "to": new_status,
                                "version": "v2"})
 
-    # ── Metadata merge ────────────────────────────────────────────────
     if "metadata" in body and isinstance(body["metadata"], dict):
         p["metadata"] = {**p.get("metadata", {}), **body["metadata"]}
 
@@ -388,30 +217,7 @@ def update_payment(payment_id: str):
 @v2_bp.route("/payments/<payment_id>/refund", methods=["POST"])
 @active_version_headers("v2")
 def refund_payment(payment_id: str):
-    """
-    [V2]  Initiate a refund for a completed payment.
-
-    Body
-    ----
-    amount   integer  — partial refund in smallest unit; omit for full refund
-    reason   string   — refund reason (optional)
-    ---
-    tags:
-      - Payments (v2 — current)
-    parameters:
-      - name: payment_id
-        in: path
-        required: true
-        schema:
-          type: string
-    responses:
-      201:
-        description: Refund payment record created
-      400:
-        description: Payment not eligible for refund
-      404:
-        description: Not found
-    """
+    
     p = payments_db.get(payment_id)
     if not p:
         return not_found("Payment", payment_id)
@@ -462,15 +268,7 @@ def refund_payment(payment_id: str):
 @v2_bp.route("/payments/summary", methods=["GET"])
 @active_version_headers("v2")
 def payment_summary():
-    """
-    [V2]  Aggregated summary of all payments (new in v2).
-    ---
-    tags:
-      - Payments (v2 — current)
-    responses:
-      200:
-        description: Summary statistics
-    """
+   
     from collections import defaultdict
 
     by_status   = defaultdict(int)

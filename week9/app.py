@@ -42,82 +42,6 @@ logger = logging.getLogger(__name__)
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    # ── Swagger / OpenAPI config ──────────────────────────────────────
-    app.config["SWAGGER"] = {
-        "title":   "Payment API — Versioning Demo",
-        "version": "2.0",
-        "uiversion": 3,
-        "openapi": "3.0.3",
-    }
-
-    swagger_config = {
-        "headers": [],
-        "specs": [
-            {
-                "endpoint": "apispec",
-                "route":    "/apispec.json",
-                "rule_filter": lambda rule: True,
-                "model_filter": lambda tag: True,
-            }
-        ],
-        "static_url_path": "/flasgger_static",
-        "swagger_ui":      True,
-        "specs_route":     "/docs/",
-    }
-
-    swagger_template = {
-        "info": {
-            "title":       "Payment API — Versioning & Lifecycle Demo",
-            "description": (
-                "## API Versioning Strategies\n\n"
-                "This API demonstrates **all three** versioning strategies:\n\n"
-                "### Strategy 1 — URL Path  *(highest priority)*\n"
-                "Embed the version directly in the URL path:\n"
-                "```\n"
-                "GET /api/v1/payments   # deprecated\n"
-                "GET /api/v2/payments   # current\n"
-                "```\n\n"
-                "### Strategy 2 — Request Header\n"
-                "Send `Accept-Version` or `X-API-Version` header:\n"
-                "```\n"
-                "GET /api/payments\n"
-                "Accept-Version: v2\n"
-                "```\n\n"
-                "### Strategy 3 — Query Parameter\n"
-                "Append `?version=` or `?api_version=` to the URL:\n"
-                "```\n"
-                "GET /api/payments?version=2\n"
-                "GET /api/payments?api_version=v1\n"
-                "```\n\n"
-                "### Priority order when multiple signals present\n"
-                "`URL path > Header > Query param > Default (v2)`\n\n"
-                "---\n\n"
-                "## Deprecation\n"
-                "v1 is **deprecated** (sunset: 2025-12-31).  "
-                "All v1 responses carry:\n"
-                "- `Deprecation` header (RFC 8594)\n"
-                "- `Sunset` header\n"
-                "- `Warning` header (RFC 7234)\n"
-                "- `Link` header pointing to migration guide\n"
-            ),
-            "version": "2.0.0",
-            "contact": {"email": "platform@example.com"},
-        },
-        "tags": [
-            {"name": "Payments (v1 — deprecated)",
-             "description": "URL path versioning: /api/v1/payments"},
-            {"name": "Payments (v2 — current)",
-             "description": "URL path versioning: /api/v2/payments"},
-            {"name": "Payments (unified — strategy 2 & 3)",
-             "description": "Header / query-param versioning: /api/payments"},
-            {"name": "Meta",
-             "description": "Version manifest, health, audit"},
-        ],
-        "servers": [{"url": "http://localhost:5000"}],
-    }
-
-    Swagger(app, config=swagger_config, template=swagger_template)
-
     # ── Register blueprints ───────────────────────────────────────────
     app.register_blueprint(v1_bp)
     app.register_blueprint(v2_bp)
@@ -200,52 +124,6 @@ def create_app() -> Flask:
     return app
 
 
-# ── Banner ────────────────────────────────────────────────────────────────
-
-# def _print_banner(app: Flask):
-#     try:
-#         from colorama import Fore, Style, init
-#         init(autoreset=True)
-#         G = Fore.GREEN; Y = Fore.YELLOW; C = Fore.CYAN
-#         R_ = Fore.RED;  W = Fore.WHITE;  B = Style.BRIGHT
-#         RS = Style.RESET_ALL
-#     except ImportError:
-#         G = Y = C = R_ = W = B = RS = ""
-
-#     lines = [
-#         "",
-#         f"{B}{C}╔══════════════════════════════════════════════════════╗{RS}",
-#         f"{B}{C}║        Payment API — Versioning & Lifecycle          ║{RS}",
-#         f"{B}{C}╚══════════════════════════════════════════════════════╝{RS}",
-#         "",
-#         f"{B}{W}  Swagger UI:{RS}  {G}http://localhost:5000/docs/{RS}",
-#         f"{B}{W}  Version manifest:{RS}  {G}http://localhost:5000/api/versions{RS}",
-#         "",
-#         f"{B}{Y}  ── Strategy 1: URL Path ─────────────────────────────{RS}",
-#         f"{R_}  [DEPRECATED] GET/POST  /api/v1/payments{RS}",
-#         f"{R_}  [DEPRECATED] GET       /api/v1/payments/<id>{RS}",
-#         f"{G}  [CURRENT]    GET/POST  /api/v2/payments{RS}",
-#         f"{G}  [CURRENT]    GET/PATCH /api/v2/payments/<id>{RS}",
-#         f"{G}  [CURRENT]    POST      /api/v2/payments/<id>/refund{RS}",
-#         f"{G}  [CURRENT]    GET       /api/v2/payments/summary{RS}",
-#         "",
-#         f"{B}{Y}  ── Strategy 2: Header ───────────────────────────────{RS}",
-#         f"{C}  GET /api/payments          + header 'Accept-Version: v2'{RS}",
-#         f"{C}  GET /api/payments          + header 'X-API-Version: v1'{RS}",
-#         "",
-#         f"{B}{Y}  ── Strategy 3: Query Param ──────────────────────────{RS}",
-#         f"{C}  GET /api/payments?version=2{RS}",
-#         f"{C}  GET /api/payments?api_version=v1{RS}",
-#         "",
-#         f"{B}{W}  Priority: URL path > Header > Query param > Default(v2){RS}",
-#         "",
-#     ]
-#     print("\n".join(lines))
-
-
-# ── Entry point ───────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     application = create_app()
-    # _print_banner(application)
     application.run(debug=True, port=5000, use_reloader=False)

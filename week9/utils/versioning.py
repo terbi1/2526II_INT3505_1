@@ -1,20 +1,3 @@
-"""
-core/versioning.py
-------------------
-Implements ALL THREE API versioning strategies:
-
-  Strategy 1 — URL Path       :  /api/v1/payments  /api/v2/payments
-  Strategy 2 — Request Header :  Accept-Version: v2   (or X-API-Version)
-  Strategy 3 — Query Param    :  /api/payments?version=2
-
-The `resolve_version()` function negotiates a single canonical version
-from whichever signal the client sends, with the priority order:
-
-    URL path  >  Header  >  Query param  >  default (latest)
-
-The `deprecated()` decorator attaches RFC 8594 Deprecation / Sunset
-headers to any response returned by an old-version handler.
-"""
 
 import datetime
 import logging
@@ -33,7 +16,7 @@ VERSION_REGISTRY: dict[str, dict] = {
     "v1": {
         "label":          "v1",
         "numeric":        1,
-        "status":         "deprecated",          # active | deprecated | sunset
+        "status":         "deprecated",          
         "released":       "2023-01-01",
         "deprecated_on":  "2024-06-01",
         "sunset_date":    "2025-12-31",

@@ -1,22 +1,3 @@
-"""
-api/v1/payments.py
-------------------
-Payment API — Version 1  (DEPRECATED)
-
-Known limitations that drove the v2 redesign
----------------------------------------------
-* `amount` is a floating-point number  →  precision loss for large values
-* `currency` is hard-coded to VND      →  no multi-currency support
-* No idempotency support               →  duplicate charges on retry
-* No `payment_method` field
-* Pagination not supported on list endpoint
-* Status transitions not validated server-side
-
-All endpoints in this module carry the @deprecated("v1") decorator which
-automatically attaches RFC 8594 Deprecation / Sunset / Link headers to
-every response.
-"""
-
 from flask import Blueprint, request
 
 from utils.database import (
@@ -44,45 +25,13 @@ def _serialise(p: dict) -> dict:
         "status":      p["status"],
         "description": p.get("description", ""),
         "created_at":  p["created_at"],
-        # ── Missing in v1 (added in v2) ───────────────────────────────
-        # "currency":         p["currency"],
-        # "payment_method":   p["payment_method"],
-        # "idempotency_key":  p["idempotency_key"],
-        # "metadata":         p["metadata"],
-        # "updated_at":       p["updated_at"],
     }
 
-
-# ── Endpoints ─────────────────────────────────────────────────────────────
 
 @v1_bp.route("/payments", methods=["GET"])
 @deprecated("v1")
 def list_payments():
-    """
-    [V1 · DEPRECATED]  List all payments.
-
-    Query params:
-      status  — filter by status string
-
-    Response shape (v1):
-      { data: { payments: [ {id, amount(float), status, description,
-                              created_at} ] } }
-
-    Migration note:
-      Use GET /api/v2/payments which adds pagination, currency filter,
-      and richer payment objects.
-    ---
-    tags:
-      - Payments (v1 — deprecated)
-    parameters:
-      - name: status
-        in: query
-        schema:
-          type: string
-    responses:
-      200:
-        description: List of payments
-    """
+  
     status_filter = request.args.get("status")
     payments = list(payments_db.values())
     if status_filter:
@@ -94,41 +43,9 @@ def list_payments():
 @v1_bp.route("/payments", methods=["POST"])
 @deprecated("v1")
 def create_payment():
-    """
-    [V1 · DEPRECATED]  Create a payment.
-
-    Request body (v1):
-      { amount: <float>, description?: <string> }
-
-    Breaking changes in v2:
-      • amount  →  integer (cents)
-      • currency  →  required
-      • Idempotency-Key header supported
-    ---
-    tags:
-      - Payments (v1 — deprecated)
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [amount]
-            properties:
-              amount:
-                type: number
-                example: 150000.50
-              description:
-                type: string
-    responses:
-      201:
-        description: Payment created
-      422:
-        description: Validation error
-    """
+    
     body = request.get_json(silent=True) or {}
 
-    # ── Validation (v1 style — minimal) ───────────────────────────────
     field_errors = collect_errors({
         "amount": (body.get("amount"), validate_amount_float),
     })
@@ -139,11 +56,11 @@ def create_payment():
     record = {
         "id":               pid,
         "amount_cents":     int(float(body["amount"]) * 100),
-        "currency":         "VND",      # ⚠ hard-coded in v1
+        "currency":         "VND",      
         "description":      body.get("description", ""),
-        "payment_method":   "card",     # ⚠ hard-coded in v1
+        "payment_method":   "card",     
         "status":           "pending",
-        "idempotency_key":  None,       # ⚠ not supported in v1
+        "idempotency_key":  None,       
         "metadata":         {},
         "created_at":       now_iso(),
         "updated_at":       now_iso(),
@@ -157,23 +74,7 @@ def create_payment():
 @v1_bp.route("/payments/<payment_id>", methods=["GET"])
 @deprecated("v1")
 def get_payment(payment_id: str):
-    """
-    [V1 · DEPRECATED]  Retrieve a single payment.
-    ---
-    tags:
-      - Payments (v1 — deprecated)
-    parameters:
-      - name: payment_id
-        in: path
-        required: true
-        schema:
-          type: string
-    responses:
-      200:
-        description: Payment detail
-      404:
-        description: Not found
-    """
+    
     p = payments_db.get(payment_id)
     if not p:
         return not_found("Payment", payment_id)
@@ -183,23 +84,7 @@ def get_payment(payment_id: str):
 @v1_bp.route("/payments/<payment_id>", methods=["DELETE"])
 @deprecated("v1")
 def delete_payment(payment_id: str):
-    """
-    [V1 · DEPRECATED]  Hard-delete a payment (removed in v2 — use PATCH status=cancelled).
-    ---
-    tags:
-      - Payments (v1 — deprecated)
-    parameters:
-      - name: payment_id
-        in: path
-        required: true
-        schema:
-          type: string
-    responses:
-      204:
-        description: Deleted
-      404:
-        description: Not found
-    """
+    
     p = payments_db.get(payment_id)
     if not p:
         return not_found("Payment", payment_id)
