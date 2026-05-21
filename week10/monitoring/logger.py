@@ -91,6 +91,7 @@ def setup_logging(app):
     app.logger.setLevel(log_level)
 
     app.logger.info(
+        "Logging initialised",
         extra={"log_level": app.config.get("LOG_LEVEL"), "log_file": log_file},
     )
 
